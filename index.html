@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Emotion TTS Generator</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 2em;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        h1 {
+            margin-bottom: 1em;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5em;
+            font-weight: bold;
+        }
+        input[type="text"], select {
+            width: 100%;
+            padding: 0.5em;
+            margin-bottom: 1em;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        button {
+            padding: 0.7em 1.5em;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #result {
+            margin-top: 1em;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Text Emotion TTS Generator</h1>
+        <form id="textForm">
+            <label for="text">Enter Text:</label>
+            <input type="text" id="text" name="text" required>
+            <label for="emotion">Select Emotion:</label>
+            <select id="emotion" name="emotion" required>
+                <option value="Happiness">Happiness</option>
+                <option value="Sadness">Sadness</option>
+                <option value="Anger">Anger</option>
+                <option value="Exclamation">Exclamation</option>
+                <option value="Distress">Distress</option>
+                <option value="Neutral">Neutral</option>
+                <option value="Mixed Emotion">Mixed Emotion</option>
+            </select>
+            <button type="submit">Generate</button>
+        </form>
+        <div id="result"></div>
+    </div>
+    <script>
+        document.getElementById('textForm').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const text = document.getElementById('text').value;
+            const emotion = document.getElementById('emotion').value;
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: new URLSearchParams({ text: text, emotion: emotion })
+            });
+            const result = await response.json();
+            document.getElementById('result').innerHTML = `
+                <p><strong>Text:</strong> ${result.text}</p>
+                <p><strong>Scores:</strong> ${JSON.stringify(result.scores)}</p>
+                <p><strong>Emotion:</strong> ${result.emotion}</p>
+                <audio controls>
+                    <source src="${result.audio_path}" type="audio/mp3">
+                    Your browser does not support the audio element.
+                </audio>
+            `;
+        });
+    </script>
+</body>
+</html>
