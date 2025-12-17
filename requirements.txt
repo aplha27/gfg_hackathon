@@ -1,0 +1,6 @@
+flask
+transformers
+scipy
+requests
+python-dotenv
+torch

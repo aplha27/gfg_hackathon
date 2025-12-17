@@ -1,39 +1,48 @@
 import os
-from flask import Flask, request, jsonify, render_template
-import pymongo
+import json
+import requests
+from flask import Flask, request, jsonify, render_template, url_for
+from dotenv import load_dotenv, find_dotenv
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
 from scipy.special import softmax
-import requests
-import json
+
+# Load environment variables
+load_dotenv(find_dotenv())
 
 app = Flask(__name__)
 
-# MongoDB Configuration
-try:
-    mongo_client = pymongo.MongoClient("mongodb+srv://2713alpha8631:7s8vktQYGHh2Rw4@alpha0.a2ba0xa.mongodb.net/tts?retryWrites=true&w=majority")
-    db = mongo_client['tts']
-    collection = db['emotions']
-    print("Connected to MongoDB successfully!")
-except pymongo.errors.OperationFailure as e:
-    print(f"OperationFailure: {e.details['errmsg']}")
-except Exception as e:
-    print(f"Exception: {e}")
+# Configuration
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
+ELEVENLABS_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID")
+
+if not all([ELEVENLABS_API_KEY, ELEVENLABS_VOICE_ID]):
+    print("Warning: Missing environment variables. Please check .env file.")
 
 # Load the RoBERTa model and tokenizer
+# Note: Loading model globally means it stays in memory.
 MODEL = "cardiffnlp/twitter-roberta-base-sentiment"
-tokenizer = AutoTokenizer.from_pretrained(MODEL)
-model = AutoModelForSequenceClassification.from_pretrained(MODEL)
+try:
+    tokenizer = AutoTokenizer.from_pretrained(MODEL)
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL)
+    print("Model loaded successfully.")
+except Exception as e:
+    print(f"Failed to load model: {e}")
+    tokenizer = None
+    model = None
 
 
 def polarity_scores_roberta(text):
+    if not tokenizer or not model:
+        return {'roberta_neg': 0, 'roberta_neu': 0, 'roberta_pos': 0}
+        
     encoded_text = tokenizer(text, return_tensors='pt')
     output = model(**encoded_text)
     scores = output[0][0].detach().numpy()
     scores = softmax(scores)
     scores_dict = {
-        'roberta_neg': scores[0],
-        'roberta_neu': scores[1],
-        'roberta_pos': scores[2]
+        'roberta_neg': float(scores[0]),
+        'roberta_neu': float(scores[1]),
+        'roberta_pos': float(scores[2])
     }
     return scores_dict
 
@@ -63,63 +72,62 @@ def get_emotion_from_text(text):
 
 
 def generate_tts(text, emotion):
-    api_key = "sk_ae481476b824ee8b41d51eec8d999d75cf184b467411f17a"
-    voice_id = "5Q0t7uMcjvnagumLfvZi"
+    if not ELEVENLABS_API_KEY or not ELEVENLABS_VOICE_ID:
+        return None, "Missing API Key or Voice ID"
 
-    if emotion == "Happiness":
-        stability = 0.8
-        similarity_boost = 0.9
-        style = 0.7
-    elif emotion == "Sadness":
-        stability = 0.5
-        similarity_boost = 0.9
-        style = 0.3
-    elif emotion == "Anger":
-        stability = 0.7
-        similarity_boost = 0.9
-        style = 0.6
-    elif emotion == "Exclamation":
-        stability = 0.6
-        similarity_boost = 0.9
-        style = 0.9
-    elif emotion == "Distress":
-        stability = 0.4
-        similarity_boost = 0.8
-        style = 0.3
-    elif emotion == "Neutral":
-        stability = 0.5
-        similarity_boost = 0.5
-        style = 0.5
-    else:
-        stability = 0.5
-        similarity_boost = 0.5
-        style = 0.5
+    # Emotion-based voice settings
+    settings = {
+        "Happiness": {"stability": 0.8, "similarity_boost": 0.9, "style": 0.7},
+        "Sadness": {"stability": 0.5, "similarity_boost": 0.9, "style": 0.3},
+        "Anger": {"stability": 0.7, "similarity_boost": 0.9, "style": 0.6},
+        "Exclamation": {"stability": 0.6, "similarity_boost": 0.9, "style": 0.9},
+        "Distress": {"stability": 0.4, "similarity_boost": 0.8, "style": 0.3},
+        "Neutral": {"stability": 0.5, "similarity_boost": 0.5, "style": 0.5},
+    }
+    
+    current_settings = settings.get(emotion, {"stability": 0.5, "similarity_boost": 0.5, "style": 0.5})
 
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID}/stream"
     headers = {
         "Content-Type": "application/json",
-        "xi-api-key": api_key
+        "xi-api-key": ELEVENLABS_API_KEY
     }
     data = {
         "text": text,
-        "model_id": "eleven_monolingual_v1",
+        "model_id": "eleven_multilingual_v2",
         "voice_settings": {
-            "stability": stability,
-            "similarity_boost": similarity_boost,
-            "style": style,
+            "stability": current_settings["stability"],
+            "similarity_boost": current_settings["similarity_boost"],
+            "style": current_settings["style"],
             "use_speaker_boost": True
         }
     }
 
-    response = requests.post(url, headers=headers, data=json.dumps(data))
+    try:
+        response = requests.post(url, headers=headers, json=data)
 
-    if response.status_code == 200:
-        audio_path = os.path.join("static", "output_audio.mp3")
-        with open(audio_path, "wb") as audio_file:
-            audio_file.write(response.content)
-        return audio_path
-    else:
-        return None
+        if response.status_code == 200:
+            # Ensure static directory exists
+            static_dir = os.path.join(app.root_path, 'static')
+            os.makedirs(static_dir, exist_ok=True)
+            
+            # Use a fixed name for simplicity as per original, or unique names in prod
+            filename = "output_audio.mp3"
+            audio_path = os.path.join(static_dir, filename)
+            
+            with open(audio_path, "wb") as audio_file:
+                audio_file.write(response.content)
+                
+            # Return relative path for frontend
+            return f"static/{filename}", None
+        else:
+            error_msg = f"ElevenLabs API Error: {response.status_code} - {response.text}"
+            print(error_msg)
+            return None, error_msg
+    except Exception as e:
+        error_msg = f"Error calling ElevenLabs API: {e}"
+        print(error_msg)
+        return None, error_msg
 
 
 @app.route('/')
@@ -130,19 +138,17 @@ def index():
 @app.route('/generate', methods=['POST'])
 def generate():
     try:
-        text = request.form['text']
-        emotion = request.form['emotion']
-        scores, detected_emotion = get_emotion_from_text(text)
-        audio_path = generate_tts(text, emotion)
+        text = request.form.get('text')
+        emotion = request.form.get('emotion')
+        
+        if not text or not emotion:
+            return jsonify({'error': 'Missing text or emotion'}), 400
 
-        # Store data in MongoDB
-        collection.insert_one({
-            'text': text,
-            'scores': scores,
-            'detected_emotion': detected_emotion,
-            'selected_emotion': emotion,
-            'audio_path': audio_path
-        })
+        scores, detected_emotion = get_emotion_from_text(text)
+        audio_path, error = generate_tts(text, emotion)
+
+        if error:
+            return jsonify({'error': error}), 400
 
         return jsonify({
             'text': text,
@@ -151,9 +157,6 @@ def generate():
             'emotion': emotion,
             'audio_path': audio_path
         })
-    except pymongo.errors.OperationFailure as e:
-        print(f"OperationFailure in /generate route: {e.details['errmsg']}")
-        return jsonify({'error': e.details['errmsg']}), 500
     except Exception as e:
         print(f"Error in /generate route: {e}")
         return jsonify({'error': str(e)}), 500
