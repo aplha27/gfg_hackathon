@@ -6,12 +6,11 @@ A modern web application that detects emotions in text using the RoBERTa model a
 - **Emotion Detection**: Uses `cardiffnlp/twitter-roberta-base-sentiment` to analyze text sentiment/emotion.
 - **Adaptive TTS**: Automatically adjusts voice stability, similarity, and style based on the detected emotion (Happiness, Sadness, Anger, etc.).
 - **Modern UI**: Clean, responsive interface built with HTML5, CSS3, and JavaScript.
-- **Data Persistence**: Stores generation history in MongoDB.
+- **Data Persistence**: (Local) Generated files are saved to `static/`.
 
 ## Prerequisites
 - Python 3.8+
 - [ElevenLabs API Key](https://elevenlabs.io/)
-- [MongoDB Atlas URI](https://www.mongodb.com/atlas)
 
 ## Setup
 
@@ -42,7 +41,6 @@ A modern web application that detects emotions in text using the RoBERTa model a
 5.  **Configure Environment**
     Ensure you have a `.env` file in the root directory with the following keys:
     ```ini
-    MONGO_URI=your_mongodb_uri
     ELEVENLABS_API_KEY=your_api_key
     ELEVENLABS_VOICE_ID=your_voice_id
     ```
@@ -50,8 +48,9 @@ A modern web application that detects emotions in text using the RoBERTa model a
 ## Usage
 
 1.  **Run the Application**
-    ```bash
-    python app.py
+    Double-click `run.bat` or run:
+    ```powershell
+    .\run.bat
     ```
 
 2.  **Access the Interface**

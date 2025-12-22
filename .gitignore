@@ -1,0 +1,7 @@
+venv/
+.env
+__pycache__/
+*.pyc
+static/output_audio.mp3
+.idea/
+.vscode/
